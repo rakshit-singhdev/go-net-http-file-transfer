@@ -1,0 +1,44 @@
+# Binaries and build output
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+file-sharing-server
+
+# Air build output
+tmp/
+
+# Uploaded runtime files
+uploads/*
+!uploads/.gitkeep
+
+# Go coverage and profiling
+coverage.out
+*.cover
+*.prof
+
+# Dependency and build caches
+vendor/
+
+# Environment and local configuration
+.env
+.env.*
+*.local
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
