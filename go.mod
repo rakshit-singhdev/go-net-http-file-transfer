@@ -5,7 +5,6 @@ go 1.27.3
 require (
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.23.0
-	github.com/tdewolff/parse/v2 v2.25.0
 	go.mongodb.org/mongo-driver/v2 v2.10.0
 )
 

@@ -123,6 +123,7 @@ func run() error {
 	)
 
 	mux.HandleFunc("POST /api/files", fileHandler.Upload)
+	mux.HandleFunc("GET /api/files/{id}", fileHandler.GetMetadata)
 
 	// HTTP server configuration
 	server := &http.Server{

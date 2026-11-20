@@ -124,3 +124,22 @@ func generatePublicID() (string, error) {
 
 	return hex.EncodeToString(bytes), nil
 }
+
+var ErrFileNotFound = errors.New("file not found")
+
+func (s *FileService) GetMetadata(ctx context.Context, publicID string) (*models.File, error) {
+	file, err := s.repository.FindByPublicID(ctx, publicID)
+	if err != nil {
+		return nil, fmt.Errorf("find file metadata: %w", err)
+	}
+
+	if file == nil {
+		return nil, ErrFileNotFound
+	}
+
+	if time.Now().UTC().After(file.ExpiresAt){
+		return nil, ErrFileNotFound
+	}
+	
+	return file, nil
+}
