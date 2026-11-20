@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"file-sharing-server/database"
+	"file-sharing-server/handlers"
 	"file-sharing-server/helpers"
 	"file-sharing-server/middleware"
+	"file-sharing-server/repositories"
+	"file-sharing-server/services"
+	"file-sharing-server/storage"
 	"log"
 	"net/http"
 	"os"
@@ -68,6 +72,43 @@ func run() error {
 
 	log.Println("Redis connected successfully")
 
+	// MongoDB repository
+	mongoDB := mongoClient.Database(os.Getenv("MONGODB_DATABASE"))
+
+	fileRepository := repositories.NewFileRepository(mongoDB)
+
+	// Initialize MongoDB indexes
+	indexCtx, indexCancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+
+	if err := fileRepository.EnsureIndexes(indexCtx); err != nil {
+		indexCancel()
+		return err
+	}
+
+	indexCancel()
+
+	log.Println("MongoDB indexes initialized")
+
+	// Local file storage
+	localStorage, err := storage.NewLocalStorage("uploads")
+	if err != nil {
+		return err
+	}
+
+	log.Println("Local file storage initialized")
+
+	// File service
+	fileService := services.NewFileService(
+		fileRepository,
+		localStorage,
+		24*time.Hour,
+	)
+
+	log.Println("File service initialized")
+
 	// HTTP routes
 	mux := http.NewServeMux()
 
@@ -75,6 +116,13 @@ func run() error {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("File Sharing Server is running"))
 	})
+
+	fileHandler := handlers.NewFileHandler(
+		fileService,
+		helpers.ParseUploadLimit(os.Getenv("MAX_UPLOAD_SIZE"), 2<<20),
+	)
+
+	mux.HandleFunc("POST /api/files", fileHandler.Upload)
 
 	// HTTP server configuration
 	server := &http.Server{

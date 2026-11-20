@@ -30,7 +30,7 @@ type FileService struct {
 	fileTTL    time.Duration
 }
 
-func NewServiceFile(
+func NewFileService(
 	repository *repositories.FileRepository,
 	storage FileStorage,
 	fileTTL time.Duration,
