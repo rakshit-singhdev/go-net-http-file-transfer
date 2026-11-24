@@ -9,6 +9,7 @@ import (
 	"file-sharing-server/repositories"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -20,8 +21,9 @@ var (
 )
 
 type FileStorage interface {
-	Save(ctx context.Context, key string, src io.Reader) (int64, error)
-	Delete(ctx context.Context, key string) error
+    Save(ctx context.Context, key string, src io.Reader) (int64, error)
+    Open(ctx context.Context, key string) (io.ReadSeekCloser, error)
+    Delete(ctx context.Context, key string) error
 }
 
 type FileService struct {
@@ -142,4 +144,26 @@ func (s *FileService) GetMetadata(ctx context.Context, publicID string) (*models
 	}
 	
 	return file, nil
+}
+
+func (s *FileService) OpenDownload(
+    ctx context.Context,
+    publicID string,
+) (*models.File, io.ReadSeekCloser, error) {
+
+    file, err := s.GetMetadata(ctx, publicID)
+    if err != nil {
+        return nil, nil, err
+    }
+
+    content, err := s.storage.Open(ctx, file.StorageKey)
+    if err != nil {
+        if errors.Is(err, os.ErrNotExist) {
+            return nil, nil, ErrFileNotFound
+        }
+
+        return nil, nil, fmt.Errorf("open file for download: %w", err)
+    }
+
+    return file, content, nil
 }

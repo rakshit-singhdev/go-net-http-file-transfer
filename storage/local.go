@@ -88,3 +88,28 @@ func (s *LocalStorage) Delete(ctx context.Context, key string) error {
 	}
 	return nil
 }
+
+func (s *LocalStorage) Open(
+    ctx context.Context,
+    key string,
+) (io.ReadSeekCloser, error) {
+
+    if err := ctx.Err(); err != nil {
+        return nil, err
+    }
+
+    if key == "" ||
+        key != filepath.Base(key) ||
+        key == "." ||
+        key == ".." ||
+        strings.ContainsAny(key, `/\`) {
+        return nil, errors.New("invalid storage key")
+    }
+
+    file, err := os.Open(filepath.Join(s.root, key))
+    if err != nil {
+        return nil, fmt.Errorf("open stored file: %w", err)
+    }
+
+    return file, nil
+}
