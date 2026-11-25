@@ -1,0 +1,125 @@
+basePath: /
+definitions:
+  handlers.MetadataResponse:
+    properties:
+      file:
+        $ref: '#/definitions/models.File'
+    type: object
+  handlers.UploadResponse:
+    properties:
+      file:
+        $ref: '#/definitions/models.File'
+      message:
+        example: File uploaded successfully
+        type: string
+    type: object
+  models.File:
+    properties:
+      contentType:
+        type: string
+      createdAt:
+        type: string
+      expiresAt:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      size:
+        type: integer
+    type: object
+info:
+  contact: {}
+  description: Upload, inspect and download temporary files.
+  title: File Sharing Server API
+  version: "1.0"
+paths:
+  /api/files:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploads a file via multipart/form-data. The file expires after
+        24 hours.
+      parameters:
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.UploadResponse'
+        "400":
+          description: Invalid multipart request or file is required
+          schema:
+            type: string
+        "413":
+          description: File too large
+          schema:
+            type: string
+        "500":
+          description: Unable to upload file
+          schema:
+            type: string
+      summary: Upload a file
+      tags:
+      - files
+  /api/files/{id}:
+    get:
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.MetadataResponse'
+        "404":
+          description: File not found
+          schema:
+            type: string
+        "500":
+          description: Unable to retrieve file metadata
+          schema:
+            type: string
+      summary: Get file metadata
+      tags:
+      - files
+  /api/files/{id}/download:
+    get:
+      description: Streams the file content as an attachment. Supports HTTP Range
+        requests.
+      parameters:
+      - description: File ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: File not found
+          schema:
+            type: string
+        "500":
+          description: Unable to download file
+          schema:
+            type: string
+      summary: Download a file
+      tags:
+      - files
+swagger: "2.0"

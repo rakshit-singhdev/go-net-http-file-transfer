@@ -9,6 +9,17 @@ import (
     "file-sharing-server/services"
 )
 
+// Download godoc
+//
+//	@Summary		Download a file
+//	@Description	Streams the file content as an attachment. Supports HTTP Range requests.
+//	@Tags			files
+//	@Produce		octet-stream
+//	@Param			id	path		string	true	"File ID"
+//	@Success		200	{file}		binary
+//	@Failure		404	{string}	string	"File not found"
+//	@Failure		500	{string}	string	"Unable to download file"
+//	@Router			/api/files/{id}/download [get]
 func (h *FileHandler) Download(
     w http.ResponseWriter,
     r *http.Request,

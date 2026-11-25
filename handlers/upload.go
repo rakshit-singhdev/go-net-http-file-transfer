@@ -24,6 +24,19 @@ func NewFileHandler(
 	}
 }
 
+// Upload godoc
+//
+//	@Summary		Upload a file
+//	@Description	Uploads a file via multipart/form-data. The file expires after 24 hours.
+//	@Tags			files
+//	@Accept			multipart/form-data
+//	@Produce		json
+//	@Param			file	formData	file	true	"File to upload"
+//	@Success		201		{object}	UploadResponse
+//	@Failure		400		{string}	string	"Invalid multipart request or file is required"
+//	@Failure		413		{string}	string	"File too large"
+//	@Failure		500		{string}	string	"Unable to upload file"
+//	@Router			/api/files [post]
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.maxUploadSize)
 
@@ -77,9 +90,9 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	response := map[string]any{
-		"message": "File uploaded successfully",
-		"file":    uploadedFile,
+	response := UploadResponse{
+		Message: "File uploaded successfully",
+		File:    uploadedFile,
 	}
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {

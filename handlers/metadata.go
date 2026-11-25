@@ -8,6 +8,16 @@ import (
     "file-sharing-server/services"
 )
 
+// GetMetadata godoc
+//
+//	@Summary	Get file metadata
+//	@Tags		files
+//	@Produce	json
+//	@Param		id	path		string	true	"File ID"
+//	@Success	200	{object}	MetadataResponse
+//	@Failure	404	{string}	string	"File not found"
+//	@Failure	500	{string}	string	"Unable to retrieve file metadata"
+//	@Router		/api/files/{id} [get]
 func (h *FileHandler) GetMetadata(
     w http.ResponseWriter,
     r *http.Request,
@@ -27,8 +37,8 @@ func (h *FileHandler) GetMetadata(
 
     w.Header().Set("Content-Type", "application/json")
 
-    if err := json.NewEncoder(w).Encode(map[string]any{
-        "file": file,
+    if err := json.NewEncoder(w).Encode(MetadataResponse{
+        File: file,
     }); err != nil {
         return
     }

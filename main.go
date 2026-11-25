@@ -18,8 +18,16 @@ import (
 	"syscall"
 	"time"
 
+	_ "file-sharing-server/docs"
+
 	"github.com/joho/godotenv"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
+
+//	@title			File Sharing Server API
+//	@version		1.0
+//	@description	Upload, inspect and download temporary files.
+//	@BasePath		/
 
 func run() error {
 	if err := godotenv.Load(); err != nil {
@@ -125,6 +133,11 @@ func run() error {
 	mux.HandleFunc("POST /api/files", fileHandler.Upload)
 	mux.HandleFunc("GET /api/files/{id}", fileHandler.GetMetadata)
 	mux.HandleFunc("GET /api/files/{id}/download", fileHandler.Download)
+
+	// Swagger UI: http://localhost:<port>/swagger/index.html
+	mux.Handle("GET /swagger/", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
+	))
 
 	// HTTP server configuration
 	server := &http.Server{
