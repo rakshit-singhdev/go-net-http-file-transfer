@@ -12,3 +12,16 @@ type UploadResponse struct {
 type MetadataResponse struct {
 	File *models.File `json:"file"`
 }
+
+// Pagination describes the page returned by a list request.
+type Pagination struct {
+	Page  int64 `json:"page" example:"1"`
+	Limit int64 `json:"limit" example:"50"`
+	Count int   `json:"count" example:"2"`
+}
+
+// ListResponse is returned when listing files.
+type ListResponse struct {
+	Files      []models.File `json:"files"`
+	Pagination Pagination    `json:"pagination"`
+}

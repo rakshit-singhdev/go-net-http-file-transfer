@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"file-sharing-server/models"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -74,32 +75,47 @@ func (r *FileRepository) FindByPublicID(
 }
 
 func (r *FileRepository) List(
-	ctx context.Context,
-	limit int64,
+    ctx context.Context,
+    limit int64,
+    skip int64,
 ) ([]models.File, error) {
-	if limit <= 0 || limit > 100 {
-		limit = 50
-	}
 
-	opts := options.Find().
-		SetSort(bson.D{
-			{Key: "created_at", Value: -1},
-		}).
-		SetLimit(limit)
+    if limit <= 0 || limit > 100 {
+        limit = 50
+    }
 
-	cursor, err := r.collection.Find(ctx, bson.D{}, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
+    if skip < 0 {
+        skip = 0
+    }
 
-	var files []models.File
+    filter := bson.D{
+        {
+            Key: "expires_at",
+            Value: bson.D{
+                {Key: "$gt", Value: time.Now().UTC()},
+            },
+        },
+    }
 
-	if err := cursor.All(ctx, &files); err != nil {
-		return nil, err
-	}
+    opts := options.Find().
+        SetSort(bson.D{{Key: "created_at", Value: -1}}).
+        SetLimit(limit).
+        SetSkip(skip)
 
-	return files, nil
+    cursor, err := r.collection.Find(ctx, filter, opts)
+    if err != nil {
+        return nil, err
+    }
+
+    defer cursor.Close(ctx)
+
+    files := make([]models.File, 0)
+
+    if err := cursor.All(ctx, &files); err != nil {
+        return nil, err
+    }
+
+    return files, nil
 }
 
 // Delete file metadata using its public ID.

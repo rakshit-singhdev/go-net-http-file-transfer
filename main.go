@@ -132,7 +132,9 @@ func run() error {
 
 	mux.HandleFunc("POST /api/files", fileHandler.Upload)
 	mux.HandleFunc("GET /api/files/{id}", fileHandler.GetMetadata)
+	mux.HandleFunc("GET /api/files/", fileHandler.List)
 	mux.HandleFunc("GET /api/files/{id}/download", fileHandler.Download)
+	mux.HandleFunc("DELETE /api/files/{id}", fileHandler.Delete)
 
 	// Swagger UI: http://localhost:<port>/swagger/index.html
 	mux.Handle("GET /swagger/", httpSwagger.Handler(

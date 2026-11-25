@@ -65,6 +65,50 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/files/": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "List files",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number (1-based)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Items per page (max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Unable to retrieve files",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/api/files/{id}": {
             "get": {
                 "produces": [
@@ -98,6 +142,38 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Unable to retrieve file metadata",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "tags": [
+                    "files"
+                ],
+                "summary": "Delete a file",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "File deleted"
+                    },
+                    "404": {
+                        "description": "File not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Unable to delete file",
                         "schema": {
                             "type": "string"
                         }
@@ -148,11 +224,42 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "handlers.ListResponse": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.File"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/handlers.Pagination"
+                }
+            }
+        },
         "handlers.MetadataResponse": {
             "type": "object",
             "properties": {
                 "file": {
                     "$ref": "#/definitions/models.File"
+                }
+            }
+        },
+        "handlers.Pagination": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "limit": {
+                    "type": "integer",
+                    "example": 50
+                },
+                "page": {
+                    "type": "integer",
+                    "example": 1
                 }
             }
         },
