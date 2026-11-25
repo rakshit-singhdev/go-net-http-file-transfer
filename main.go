@@ -117,6 +117,20 @@ func run() error {
 
 	log.Println("File service initialized")
 
+	// Background cleanup of expired files
+	cleanupCtx, cleanupCancel := context.WithCancel(
+		context.Background(),
+	)
+	defer cleanupCancel()
+
+	go services.RunCleanupWorker(
+		cleanupCtx,
+		fileService,
+		time.Minute,
+	)
+
+	log.Println("Cleanup worker started")
+
 	// HTTP routes
 	mux := http.NewServeMux()
 
@@ -131,8 +145,8 @@ func run() error {
 	)
 
 	mux.HandleFunc("POST /api/files", fileHandler.Upload)
-	mux.HandleFunc("GET /api/files/{id}", fileHandler.GetMetadata)
 	mux.HandleFunc("GET /api/files/", fileHandler.List)
+	mux.HandleFunc("GET /api/files/{id}", fileHandler.GetMetadata)
 	mux.HandleFunc("GET /api/files/{id}/download", fileHandler.Download)
 	mux.HandleFunc("DELETE /api/files/{id}", fileHandler.Delete)
 

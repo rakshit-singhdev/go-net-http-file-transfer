@@ -134,3 +134,41 @@ func (r *FileRepository) DeleteByPublicID(
 
 	return result.DeletedCount > 0, nil
 }
+
+func (r *FileRepository) ListExpired(
+    ctx context.Context,
+    now time.Time,
+    limit int64,
+) ([]models.File, error) {
+
+    if limit <= 0 || limit > 100 {
+        limit = 100
+    }
+
+    filter := bson.D{
+        {
+            Key: "expires_at",
+            Value: bson.D{
+                {Key: "$lte", Value: now},
+            },
+        },
+    }
+
+    opts := options.Find().
+        SetSort(bson.D{{Key: "expires_at", Value: 1}}).
+        SetLimit(limit)
+
+    cursor, err := r.collection.Find(ctx, filter, opts)
+    if err != nil {
+        return nil, err
+    }
+    defer cursor.Close(ctx)
+
+    files := make([]models.File, 0)
+
+    if err := cursor.All(ctx, &files); err != nil {
+        return nil, err
+    }
+
+    return files, nil
+}
