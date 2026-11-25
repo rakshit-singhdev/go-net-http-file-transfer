@@ -165,7 +165,7 @@ func run() error {
 		helpers.ParseUploadLimit(os.Getenv("MAX_UPLOAD_SIZE"), 2<<20),
 	)
 
-	mux.HandleFunc("POST /api/files", fileHandler.Upload)
+	mux.Handle("POST /api/files", middleware.RateLimitMiddleware(redisClient, 10, time.Minute)(http.HandlerFunc(fileHandler.Upload)))
 	mux.HandleFunc("GET /api/files/{id}", fileHandler.GetMetadata)
 	mux.HandleFunc("GET /api/files/", fileHandler.List)
 	mux.HandleFunc("GET /api/files/{id}/download", fileHandler.Download)
