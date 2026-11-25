@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"file-sharing-server/models"
 	"file-sharing-server/repositories"
@@ -27,22 +28,31 @@ type FileStorage interface {
 	Delete(ctx context.Context, key string) error
 }
 
+type FileCache interface {
+    Get(ctx context.Context, key string) ([]byte, error)
+    Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
+    Delete(ctx context.Context, key string) error
+}
+
 type FileService struct {
-	repository *repositories.FileRepository
-	storage    FileStorage
-	fileTTL    time.Duration
+    repository *repositories.FileRepository
+    storage    FileStorage
+    cache      FileCache
+    fileTTL    time.Duration
 }
 
 func NewFileService(
-	repository *repositories.FileRepository,
-	storage FileStorage,
-	fileTTL time.Duration,
+    repository *repositories.FileRepository,
+    storage FileStorage,
+    cache FileCache,
+    fileTTL time.Duration,
 ) *FileService {
-	return &FileService{
-		repository: repository,
-		storage:    storage,
-		fileTTL:    fileTTL,
-	}
+    return &FileService{
+        repository: repository,
+        storage:    storage,
+        cache:      cache,
+        fileTTL:    fileTTL,
+    }
 }
 
 type UploadInput struct {
@@ -152,23 +162,6 @@ func generatePublicID(name string, now time.Time) (string, error) {
 
 var ErrFileNotFound = errors.New("file not found")
 
-func (s *FileService) GetMetadata(ctx context.Context, publicID string) (*models.File, error) {
-	file, err := s.repository.FindByPublicID(ctx, publicID)
-	if err != nil {
-		return nil, fmt.Errorf("find file metadata: %w", err)
-	}
-
-	if file == nil {
-		return nil, ErrFileNotFound
-	}
-
-	if time.Now().UTC().After(file.ExpiresAt) {
-		return nil, ErrFileNotFound
-	}
-
-	return file, nil
-}
-
 func (s *FileService) OpenDownload(
 	ctx context.Context,
 	publicID string,
@@ -227,9 +220,91 @@ func (s *FileService) DeleteFile(ctx context.Context, publicID string) error {
 		return ErrFileNotFound
 	}
 
+	// Drop cached metadata so the deleted file is not served from Redis.
+	if s.cache != nil {
+		_ = s.cache.Delete(ctx, fileCacheKey(publicID))
+	}
+
 	if err := s.storage.Delete(ctx, file.StorageKey); err != nil {
 		return fmt.Errorf("delete stored file: %w", err)
 	}
 
 	return nil
+}
+
+func fileCacheKey(publicID string) string {
+    return "files:metadata:" + publicID
+}
+
+func (s *FileService) GetMetadata(
+    ctx context.Context,
+    publicID string,
+) (*models.File, error) {
+
+    key := fileCacheKey(publicID)
+
+    // 1. Try Redis first.
+    if s.cache != nil {
+        cached, err := s.cache.Get(ctx, key)
+
+        if err == nil {
+            var file models.File
+
+            if json.Unmarshal(cached, &file) == nil &&
+                file.PublicID == publicID &&
+                time.Now().UTC().Before(file.ExpiresAt) {
+                return &file, nil
+            }
+
+            // Invalid or expired cached data.
+            _ = s.cache.Delete(ctx, key)
+        }
+
+        // On a cache miss or Redis failure, fall back to MongoDB.
+    }
+
+    // 2. Cache miss: fetch from MongoDB.
+    file, err := s.repository.FindByPublicID(ctx, publicID)
+    if err != nil {
+        return nil, fmt.Errorf("find file metadata: %w", err)
+    }
+
+    if file == nil || !time.Now().UTC().Before(file.ExpiresAt) {
+        return nil, ErrFileNotFound
+    }
+
+    // 3. Store metadata in Redis.
+    if s.cache != nil {
+        data, err := json.Marshal(file)
+
+        if err == nil {
+            ttl := 5 * time.Minute
+            remaining := time.Until(file.ExpiresAt)
+
+            if remaining < ttl {
+                ttl = remaining
+            }
+
+            if ttl > 0 {
+                _ = s.cache.Set(ctx, key, data, ttl)
+            }
+        }
+    }
+
+    return file, nil
+}
+// ApplyTTLToAllFiles makes the current TTL apply to files uploaded
+// before it was changed, by recomputing each file's expiry from its
+// creation time.
+func (s *FileService) ApplyTTLToAllFiles(ctx context.Context) (int64, error) {
+	if s.fileTTL <= 0 {
+		return 0, ErrInvalidExpiry
+	}
+
+	updated, err := s.repository.ApplyTTL(ctx, s.fileTTL)
+	if err != nil {
+		return 0, fmt.Errorf("apply file TTL: %w", err)
+	}
+
+	return updated, nil
 }

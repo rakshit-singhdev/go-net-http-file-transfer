@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"file-sharing-server/cache"
 	"file-sharing-server/database"
 	"file-sharing-server/handlers"
 	"file-sharing-server/helpers"
@@ -109,13 +110,33 @@ func run() error {
 	log.Println("Local file storage initialized")
 
 	// File service
+	// fileTTL := helpers.ParseDuration(os.Getenv("FILE_TTL"), 24*time.Hour)
+	fileTTL := helpers.ParseDuration(os.Getenv("FILE_TTL"), 30*time.Second)
+	
 	fileService := services.NewFileService(
 		fileRepository,
 		localStorage,
-		24*time.Hour,
+		cache.NewRedisCache(redisClient),
+		fileTTL,
 	)
 
-	log.Println("File service initialized")
+	log.Println("File service initialized with TTL", fileTTL)
+
+	// Apply the current TTL to files uploaded before it was changed
+	ttlCtx, ttlCancel := context.WithTimeout(
+		context.Background(),
+		// 24*time.Hour,
+		30*time.Second,
+	)
+
+	updated, err := fileService.ApplyTTLToAllFiles(ttlCtx)
+	ttlCancel()
+
+	if err != nil {
+		return err
+	}
+
+	log.Printf("File TTL applied; %d existing files updated", updated)
 
 	// Background cleanup of expired files
 	cleanupCtx, cleanupCancel := context.WithCancel(
@@ -145,8 +166,8 @@ func run() error {
 	)
 
 	mux.HandleFunc("POST /api/files", fileHandler.Upload)
-	mux.HandleFunc("GET /api/files/", fileHandler.List)
 	mux.HandleFunc("GET /api/files/{id}", fileHandler.GetMetadata)
+	mux.HandleFunc("GET /api/files/", fileHandler.List)
 	mux.HandleFunc("GET /api/files/{id}/download", fileHandler.Download)
 	mux.HandleFunc("DELETE /api/files/{id}", fileHandler.Delete)
 

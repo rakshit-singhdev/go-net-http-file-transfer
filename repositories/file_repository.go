@@ -172,3 +172,24 @@ func (r *FileRepository) ListExpired(
 
     return files, nil
 }
+// ApplyTTL recomputes expires_at for every file as created_at + ttl.
+// It returns the number of documents whose expiry changed.
+func (r *FileRepository) ApplyTTL(
+	ctx context.Context,
+	ttl time.Duration,
+) (int64, error) {
+	update := mongo.Pipeline{
+		{{Key: "$set", Value: bson.D{
+			{Key: "expires_at", Value: bson.D{
+				{Key: "$add", Value: bson.A{"$created_at", ttl.Milliseconds()}},
+			}},
+		}}},
+	}
+
+	result, err := r.collection.UpdateMany(ctx, bson.D{}, update)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.ModifiedCount, nil
+}
