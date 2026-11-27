@@ -1,0 +1,22 @@
+package models
+
+import (
+	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+)
+
+const (
+	RoleUser  = "user"
+	RoleAdmin = "admin"
+)
+
+type User struct {
+	ID           bson.ObjectID `bson:"_id,omitempty" json:"-"`
+	Name         string        `bson:"name" json:"name"`
+	Email        string        `bson:"email" json:"email"`
+	PasswordHash string        `bson:"password_hash" json:"-"`
+	Role         string        `bson:"role" json:"role"`
+	CreatedAt    time.Time     `bson:"created_at" json:"createdAt"`
+	UpdatedAt    time.Time     `bson:"updated_at" json:"updatedAt"`
+}

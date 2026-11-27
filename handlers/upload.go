@@ -3,10 +3,13 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"file-sharing-server/middleware"
 	"file-sharing-server/services"
 	"fmt"
 	"net/http"
 	"path/filepath"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type FileHandler struct {
@@ -27,10 +30,11 @@ func NewFileHandler(
 // Upload godoc
 //
 //	@Summary		Upload a file
-//	@Description	Uploads a file via multipart/form-data. The file expires after 24 hours.
+//	@Description	Uploads a file via multipart/form-data. The file expires after the configured TTL.
 //	@Tags			files
 //	@Accept			multipart/form-data
 //	@Produce		json
+//	@Security		BearerAuth
 //	@Param			file	formData	file	true	"File to upload"
 //	@Success		201		{object}	UploadResponse
 //	@Failure		400		{string}	string	"Invalid multipart request or file is required"
@@ -39,6 +43,15 @@ func NewFileHandler(
 //	@Router			/api/files [post]
 func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.maxUploadSize)
+
+	ownerID, ok := r.Context().Value(
+		middleware.UserIDContextKey,
+	).(bson.ObjectID)
+
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		var maxBytesErr *http.MaxBytesError
@@ -76,6 +89,7 @@ func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	uploadedFile, err := h.fileServices.Upload(
 		r.Context(),
 		services.UploadInput{
+			OwnerID:     ownerID,
 			Name:        filepath.Base(header.Filename),
 			ContentType: contentType,
 			Content:     file,

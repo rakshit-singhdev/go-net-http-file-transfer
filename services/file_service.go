@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 var (
@@ -29,33 +31,34 @@ type FileStorage interface {
 }
 
 type FileCache interface {
-    Get(ctx context.Context, key string) ([]byte, error)
-    Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
-    Delete(ctx context.Context, key string) error
+	Get(ctx context.Context, key string) ([]byte, error)
+	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
+	Delete(ctx context.Context, key string) error
 }
 
 type FileService struct {
-    repository *repositories.FileRepository
-    storage    FileStorage
-    cache      FileCache
-    fileTTL    time.Duration
+	repository *repositories.FileRepository
+	storage    FileStorage
+	cache      FileCache
+	fileTTL    time.Duration
 }
 
 func NewFileService(
-    repository *repositories.FileRepository,
-    storage FileStorage,
-    cache FileCache,
-    fileTTL time.Duration,
+	repository *repositories.FileRepository,
+	storage FileStorage,
+	cache FileCache,
+	fileTTL time.Duration,
 ) *FileService {
-    return &FileService{
-        repository: repository,
-        storage:    storage,
-        cache:      cache,
-        fileTTL:    fileTTL,
-    }
+	return &FileService{
+		repository: repository,
+		storage:    storage,
+		cache:      cache,
+		fileTTL:    fileTTL,
+	}
 }
 
 type UploadInput struct {
+	OwnerID     bson.ObjectID
 	Name        string
 	ContentType string
 	Content     io.Reader
@@ -68,6 +71,10 @@ func (s *FileService) Upload(
 	name := strings.TrimSpace(input.Name)
 	name = strings.ReplaceAll(name, "\\", "/")
 	name = path.Base(name)
+
+	if input.OwnerID == (bson.ObjectID{}) {
+		return nil, errors.New("owner ID is required")
+	}
 
 	if name == "" || name == "." || name == "/" {
 		return nil, ErrInvalidFileName
@@ -98,6 +105,7 @@ func (s *FileService) Upload(
 
 	// Prepare file metadata.
 	file := models.File{
+		OwnerID:      input.OwnerID,
 		PublicID:     publicID,
 		OriginalName: name,
 		StorageKey:   storageKey,
@@ -130,34 +138,34 @@ func (s *FileService) Upload(
 var nonAlphaNumeric = regexp.MustCompile(`[^a-z0-9]+`)
 
 func generatePublicID(name string, now time.Time) (string, error) {
-    // Remove the file extension.
-    nameWithoutExtension := strings.TrimSuffix(name, path.Ext(name))
+	// Remove the file extension.
+	nameWithoutExtension := strings.TrimSuffix(name, path.Ext(name))
 
-    // Convert the filename into a URL-friendly slug.
-    slug := strings.ToLower(nameWithoutExtension)
-    slug = nonAlphaNumeric.ReplaceAllString(slug, "-")
-    slug = strings.Trim(slug, "-")
+	// Convert the filename into a URL-friendly slug.
+	slug := strings.ToLower(nameWithoutExtension)
+	slug = nonAlphaNumeric.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
 
-    if slug == "" {
-        slug = "file"
-    }
+	if slug == "" {
+		slug = "file"
+	}
 
-    // Limit the slug length.
-    if len(slug) > 40 {
-        slug = strings.TrimRight(slug[:40], "-")
-    }
+	// Limit the slug length.
+	if len(slug) > 40 {
+		slug = strings.TrimRight(slug[:40], "-")
+	}
 
-    // Generate a random suffix.
-    randomBytes := make([]byte, 6)
+	// Generate a random suffix.
+	randomBytes := make([]byte, 6)
 
-    if _, err := rand.Read(randomBytes); err != nil {
-        return "", err
-    }
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", err
+	}
 
-    randomID := hex.EncodeToString(randomBytes)
-    timestamp := now.Format("20060102-150405")
+	randomID := hex.EncodeToString(randomBytes)
+	timestamp := now.Format("20060102-150405")
 
-    return fmt.Sprintf("%s-%s-%s", slug, timestamp, randomID), nil
+	return fmt.Sprintf("%s-%s-%s", slug, timestamp, randomID), nil
 }
 
 var ErrFileNotFound = errors.New("file not found")
@@ -185,18 +193,19 @@ func (s *FileService) OpenDownload(
 }
 
 func (s *FileService) ListFiles(
-    ctx context.Context,
-    limit int64,
-    skip int64,
+	ctx context.Context,
+	limit int64,
+	skip int64,
 ) ([]models.File, error) {
 
-    files, err := s.repository.List(ctx, limit, skip)
-    if err != nil {
-        return nil, fmt.Errorf("list files: %w", err)
-    }
+	files, err := s.repository.List(ctx, limit, skip)
+	if err != nil {
+		return nil, fmt.Errorf("list files: %w", err)
+	}
 
-    return files, nil
+	return files, nil
 }
+
 // DeleteFile removes a file's metadata and its stored content.
 // Expired files can still be deleted so they can be cleaned up.
 func (s *FileService) DeleteFile(ctx context.Context, publicID string) error {
@@ -233,66 +242,67 @@ func (s *FileService) DeleteFile(ctx context.Context, publicID string) error {
 }
 
 func fileCacheKey(publicID string) string {
-    return "files:metadata:" + publicID
+	return "files:metadata:" + publicID
 }
 
 func (s *FileService) GetMetadata(
-    ctx context.Context,
-    publicID string,
+	ctx context.Context,
+	publicID string,
 ) (*models.File, error) {
 
-    key := fileCacheKey(publicID)
+	key := fileCacheKey(publicID)
 
-    // 1. Try Redis first.
-    if s.cache != nil {
-        cached, err := s.cache.Get(ctx, key)
+	// 1. Try Redis first.
+	if s.cache != nil {
+		cached, err := s.cache.Get(ctx, key)
 
-        if err == nil {
-            var file models.File
+		if err == nil {
+			var file models.File
 
-            if json.Unmarshal(cached, &file) == nil &&
-                file.PublicID == publicID &&
-                time.Now().UTC().Before(file.ExpiresAt) {
-                return &file, nil
-            }
+			if json.Unmarshal(cached, &file) == nil &&
+				file.PublicID == publicID &&
+				time.Now().UTC().Before(file.ExpiresAt) {
+				return &file, nil
+			}
 
-            // Invalid or expired cached data.
-            _ = s.cache.Delete(ctx, key)
-        }
+			// Invalid or expired cached data.
+			_ = s.cache.Delete(ctx, key)
+		}
 
-        // On a cache miss or Redis failure, fall back to MongoDB.
-    }
+		// On a cache miss or Redis failure, fall back to MongoDB.
+	}
 
-    // 2. Cache miss: fetch from MongoDB.
-    file, err := s.repository.FindByPublicID(ctx, publicID)
-    if err != nil {
-        return nil, fmt.Errorf("find file metadata: %w", err)
-    }
+	// 2. Cache miss: fetch from MongoDB.
+	file, err := s.repository.FindByPublicID(ctx, publicID)
+	if err != nil {
+		return nil, fmt.Errorf("find file metadata: %w", err)
+	}
 
-    if file == nil || !time.Now().UTC().Before(file.ExpiresAt) {
-        return nil, ErrFileNotFound
-    }
+	if file == nil || !time.Now().UTC().Before(file.ExpiresAt) {
+		return nil, ErrFileNotFound
+	}
 
-    // 3. Store metadata in Redis.
-    if s.cache != nil {
-        data, err := json.Marshal(file)
+	// 3. Store metadata in Redis.
+	if s.cache != nil {
+		data, err := json.Marshal(file)
 
-        if err == nil {
-            ttl := 5 * time.Minute
-            remaining := time.Until(file.ExpiresAt)
+		if err == nil {
+			ttl := 5 * time.Minute
+			remaining := time.Until(file.ExpiresAt)
 
-            if remaining < ttl {
-                ttl = remaining
-            }
+			if remaining < ttl {
+				ttl = remaining
+			}
 
-            if ttl > 0 {
-                _ = s.cache.Set(ctx, key, data, ttl)
-            }
-        }
-    }
+			if ttl > 0 {
+				_ = s.cache.Set(ctx, key, data, ttl)
+			}
+		}
+	}
 
-    return file, nil
+	return file, nil
 }
+
 // ApplyTTLToAllFiles makes the current TTL apply to files uploaded
 // before it was changed, by recomputing each file's expiry from its
 // creation time.

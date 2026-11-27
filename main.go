@@ -29,6 +29,11 @@ import (
 //	@version		1.0
 //	@description	Upload, inspect and download temporary files.
 //	@BasePath		/
+//
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				Enter "Bearer" followed by a space and your JWT.
 
 func run() error {
 	if err := godotenv.Load(); err != nil {
@@ -85,6 +90,7 @@ func run() error {
 	mongoDB := mongoClient.Database(os.Getenv("MONGODB_DATABASE"))
 
 	fileRepository := repositories.NewFileRepository(mongoDB)
+	userRepository := repositories.NewUserRepository(mongoDB)
 
 	// Initialize MongoDB indexes
 	indexCtx, indexCancel := context.WithTimeout(
@@ -93,6 +99,11 @@ func run() error {
 	)
 
 	if err := fileRepository.EnsureIndexes(indexCtx); err != nil {
+		indexCancel()
+		return err
+	}
+
+	if err := userRepository.EnsureIndexes(indexCtx); err != nil {
 		indexCancel()
 		return err
 	}
@@ -109,15 +120,33 @@ func run() error {
 
 	log.Println("Local file storage initialized")
 
+	// JWT configuration
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if len(jwtSecret) < 32 {
+		return errors.New("JWT_SECRET is not set or too short")
+	}
+
+	tokenDuration, err := time.ParseDuration(os.Getenv("JWT_EXPIRES_IN"))
+	if err != nil {
+		return err
+	}
+
+	log.Println("JWT configuration initialized with duration", tokenDuration)
+
 	// File service
 	// fileTTL := helpers.ParseDuration(os.Getenv("FILE_TTL"), 24*time.Hour)
 	fileTTL := helpers.ParseDuration(os.Getenv("FILE_TTL"), 30*time.Second)
-	
+
 	fileService := services.NewFileService(
 		fileRepository,
 		localStorage,
 		cache.NewRedisCache(redisClient),
 		fileTTL,
+	)
+	authService := services.NewAuthService(
+		userRepository,
+		jwtSecret,
+		tokenDuration,
 	)
 
 	log.Println("File service initialized with TTL", fileTTL)
@@ -164,8 +193,14 @@ func run() error {
 		fileService,
 		helpers.ParseUploadLimit(os.Getenv("MAX_UPLOAD_SIZE"), 2<<20),
 	)
+	authHandler := handlers.NewAuthHandler(authService)
 
-	mux.Handle("POST /api/files", middleware.RateLimitMiddleware(redisClient, 10, time.Minute)(http.HandlerFunc(fileHandler.Upload)))
+	mux.HandleFunc("POST /api/auth/register", authHandler.Register)
+	mux.HandleFunc("POST /api/auth/login", authHandler.Login)
+
+	mux.Handle("POST /api/files", middleware.RateLimitMiddleware(redisClient, 10, time.Minute)(middleware.AuthMiddleware(jwtSecret)(
+		http.HandlerFunc(fileHandler.Upload),
+	)))
 	mux.HandleFunc("GET /api/files/{id}", fileHandler.GetMetadata)
 	mux.HandleFunc("GET /api/files/", fileHandler.List)
 	mux.HandleFunc("GET /api/files/{id}/download", fileHandler.Download)

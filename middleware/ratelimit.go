@@ -7,6 +7,7 @@ import (
     "net"
     "net/http"
     "strconv"
+    "strings"
     "time"
 
     "github.com/redis/go-redis/v9"
@@ -103,7 +104,10 @@ func RateLimitMiddleware(
 
                 http.Error(
                     w,
-                    "Too many upload requests. Please try again later.",
+                    fmt.Sprintf(
+                        "Too many upload requests. Please try again after %s.",
+                        formatRetryAfter(retryAfter),
+                    ),
                     http.StatusTooManyRequests,
                 )
                 return
@@ -112,4 +116,25 @@ func RateLimitMiddleware(
             next.ServeHTTP(w, r)
         })
     }
+}
+
+// formatRetryAfter turns seconds into a short form like "1 hr 5 min 3 sec",
+// leaving out zero parts.
+func formatRetryAfter(seconds int64) string {
+    h := seconds / 3600
+    m := (seconds % 3600) / 60
+    s := seconds % 60
+
+    parts := make([]string, 0, 3)
+    if h > 0 {
+        parts = append(parts, fmt.Sprintf("%d hr", h))
+    }
+    if m > 0 {
+        parts = append(parts, fmt.Sprintf("%d min", m))
+    }
+    if s > 0 || len(parts) == 0 {
+        parts = append(parts, fmt.Sprintf("%d sec", s))
+    }
+
+    return strings.Join(parts, " ")
 }

@@ -8,6 +8,7 @@ import (
 
 type File struct {
 	ID           bson.ObjectID `bson:"_id,omitempty" json:"-"`
+	OwnerID bson.ObjectID `bson:"owner_id" json:"-"`
 	PublicID     string        `bson:"public_id" json:"id"`
 	OriginalName string        `bson:"original_name" json:"name"`
 	StorageKey   string        `bson:"storage_key" json:"-"`

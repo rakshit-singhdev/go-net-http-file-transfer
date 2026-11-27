@@ -1,5 +1,18 @@
 basePath: /
 definitions:
+  handlers.AuthUserResponse:
+    properties:
+      createdAt:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      role:
+        type: string
+    type: object
   handlers.ListResponse:
     properties:
       files:
@@ -8,6 +21,22 @@ definitions:
         type: array
       pagination:
         $ref: '#/definitions/handlers.Pagination'
+    type: object
+  handlers.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  handlers.LoginResponse:
+    properties:
+      message:
+        type: string
+      token:
+        type: string
+      user:
+        $ref: '#/definitions/handlers.AuthUserResponse'
     type: object
   handlers.MetadataResponse:
     properties:
@@ -25,6 +54,22 @@ definitions:
       page:
         example: 1
         type: integer
+    type: object
+  handlers.RegisterRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+    type: object
+  handlers.RegisterResponse:
+    properties:
+      message:
+        type: string
+      user:
+        $ref: '#/definitions/handlers.AuthUserResponse'
     type: object
   handlers.UploadResponse:
     properties:
@@ -55,12 +100,92 @@ info:
   title: File Sharing Server API
   version: "1.0"
 paths:
+  /api/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Verifies email and password and returns a JWT access token.
+      parameters:
+      - description: Login details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.LoginResponse'
+        "400":
+          description: Email and password are required
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Invalid email or password
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Login failed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Authenticate a user
+      tags:
+      - auth
+  /api/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a user account and stores the password using Argon2id.
+      parameters:
+      - description: Registration details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.RegisterResponse'
+        "400":
+          description: Invalid registration input
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Email already registered
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Registration failed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - auth
   /api/files:
     post:
       consumes:
       - multipart/form-data
       description: Uploads a file via multipart/form-data. The file expires after
-        24 hours.
+        the configured TTL.
       parameters:
       - description: File to upload
         in: formData
@@ -86,6 +211,8 @@ paths:
           description: Unable to upload file
           schema:
             type: string
+      security:
+      - BearerAuth: []
       summary: Upload a file
       tags:
       - files
@@ -194,4 +321,10 @@ paths:
       summary: Download a file
       tags:
       - files
+securityDefinitions:
+  BearerAuth:
+    description: Enter "Bearer" followed by a space and your JWT.
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"
